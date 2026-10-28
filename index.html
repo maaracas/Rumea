@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-100 text-slate-800">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RUMEA - Tu Ruta Interrail por Europa</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        rumea: {
+                            50: '#fdf2f4',
+                            100: '#fbe5e9',
+                            200: '#f7ced7',
+                            300: '#f1a8b8',
+                            400: '#e57791',
+                            500: '#b8435d', // Rojo Rumea Principal
+                            600: '#a3384f',
+                            700: '#892b3f',
+                            olive: '#5b6e3a', // Verde Rumea Rieles
+                            oliveLight: '#788e4f',
+                            dark: '#1e2022'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        .leaflet-container {
+            background-color: #f1f5f9 !important;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            border-radius: 1.5rem;
+        }
+
+        .custom-station-icon {
+            background: linear-gradient(135deg, #b8435d 0%, #a3384f 100%);
+            border: 2.5px solid #ffffff;
+            border-radius: 50%;
+            color: white;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(184, 67, 93, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .custom-station-icon.active {
+            background: linear-gradient(135deg, #5b6e3a 0%, #47572d 100%);
+            transform: scale(1.35);
+            box-shadow: 0 0 20px rgba(91, 110, 58, 0.7);
+            border-color: #ffffff;
+            z-index: 1000 !important;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(184, 67, 93, 0.3);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(184, 67, 93, 0.6);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans bg-slate-100 text-slate-800 antialiased overflow-hidden">
+
+    <!-- CABECERA PRINCIPAL RUMEA -->
+    <header class="bg-white border-b border-slate-200/80 px-6 py-2.5 flex items-center justify-between shrink-0 shadow-sm z-30">
+        <div class="flex items-center space-x-3">
+            <div class="h-10 flex items-center cursor-pointer" onclick="selectDestination(0)">
+                <img src="https://i.ibb.co/23k56d58/rumea-ti-tulo.png" alt="RUMEA Logo" class="h-10 w-auto object-contain max-h-full" onerror="this.onerror=null; this.src='https://i.ibb.co/fdxQSHQ8/logo.png';">
+            </div>
+        </div>
+
+        <!-- Controles globales -->
+        <div class="flex items-center space-x-3">
+            <button id="playBtn" onclick="toggleTourAnimation()" class="px-4 py-2 bg-rumea-500 hover:bg-rumea-600 text-white rounded-xl text-xs font-bold tracking-wide transition-all shadow-sm shadow-rumea-500/30 flex items-center space-x-2">
+                <i id="playIcon" class="fa-solid fa-play text-[10px]"></i>
+                <span id="playText">REPRODUCIR RUTA</span>
+            </button>
+            <div class="hidden md:flex text-xs bg-slate-100 border border-slate-200 rounded-xl p-1">
+                <span class="px-3 py-1 text-slate-600 font-medium"><i class="fa-regular fa-clock text-rumea-500 mr-1.5"></i>15 Días</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTENEDOR PRINCIPAL CON ESPACIADO ENTRE MÓDULOS -->
+    <main class="flex-1 flex flex-col md:flex-row p-3 md:p-4 gap-4 relative overflow-hidden bg-slate-100">
+
+        <!-- LADO IZQUIERDO: RECUADRO REDONDEADO DEL MAPA -->
+        <section class="w-full md:w-3/5 lg:w-2/3 h-1/2 md:h-full relative bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col">
+            
+            <div id="map" class="w-full h-full z-10 rounded-3xl"></div>
+
+            <!-- Navegación rápida superior de ciudades -->
+            <div class="absolute top-4 left-4 right-4 z-20 flex space-x-2 overflow-x-auto pb-1 no-scrollbar pointer-events-auto">
+                <div id="timelineBadges" class="flex space-x-2 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-md">
+                    <!-- Se llena dinámicamente -->
+                </div>
+            </div>
+        </section>
+
+        <!-- LADO DERECHO: RECUADRO REDONDEADO DE DETALLES DEL DESTINO -->
+        <section class="w-full md:w-2/5 lg:w-1/3 h-1/2 md:h-full bg-white rounded-3xl shadow-sm border border-slate-200/80 flex flex-col overflow-hidden z-20">
+            
+            <!-- Header con Navegación Anterior / Siguiente -->
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <span class="text-xs font-bold text-rumea-500 uppercase tracking-widest flex items-center">
+                    <i class="fa-solid fa-compass mr-2 text-rumea-olive"></i> Parada <span id="currentStepIndex" class="ml-1 text-slate-900">1</span> / 7
+                </span>
+
+                <div class="flex items-center space-x-2">
+                    <button id="prevBtn" onclick="navigateDestination(-1)" class="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:bg-rumea-50 text-slate-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed shadow-sm">
+                        <i class="fa-solid fa-chevron-left text-xs"></i>
+                    </button>
+                    <button id="nextBtn" onclick="navigateDestination(1)" class="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:bg-rumea-50 text-slate-700 flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed shadow-sm">
+                        <i class="fa-solid fa-chevron-right text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenido dinámico del itinerario scrollable -->
+            <div id="detailsContent" class="flex-1 overflow-y-auto p-5 space-y-5 fade-in">
+                <!-- Se inyecta dinámicamente -->
+            </div>
+
+            <!-- Footer con reserva -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end shrink-0">
+                <button onclick="showBookingModal()" class="w-full py-3 bg-rumea-olive hover:bg-rumea-oliveLight text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rumea-olive/20 flex items-center justify-center space-x-2">
+                    <span>RESERVAR PACK</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL DE RESERVA -->
+    <div id="bookingModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-white border border-slate-100 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="text-xl font-bold text-slate-900 flex items-center">
+                    <i class="fa-solid fa-ticket text-rumea-500 mr-2.5"></i> ¡Reserva tu Viaje Rumea!
+                </h3>
+                <button onclick="closeBookingModal()" class="text-slate-400 hover:text-slate-700">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Has seleccionado el itinerario completo de 7 destinos europeos. Te enviaremos toda la información sobre los billetes de tren y alojamientos seleccionados.
+            </p>
+            <form onsubmit="handleBookingSubmit(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nombre Completo</label>
+                    <input type="text" required placeholder="Ej: María García" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-rumea-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Correo Electrónico</label>
+                    <input type="email" required placeholder="tu@email.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-rumea-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Fecha de Inicio Estimada</label>
+                    <input type="date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-rumea-500">
+                </div>
+                <button type="submit" class="w-full py-3 bg-rumea-500 hover:bg-rumea-600 text-white rounded-xl text-xs font-bold transition shadow-md shadow-rumea-500/20">
+                    CONFIRMAR PRE-RESERVA
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT DE LA APLICACIÓN -->
+    <script>
+        // EXACTOS 7 DESTINOS DEL ITINERARIO RUMEA
+        const itineraryData = [
+            {
+                id: 1,
+                city: "Barcelona",
+                country: "España",
+                days: "Días 1 - 2",
+                coords: [41.3879, 2.1699],
+                image: "https://images.unsplash.com/photo-1583422409516-2895a77efded?auto=format&fit=crop&w=800&q=80",
+                trainInfo: {
+                    from: "Punto de Origen",
+                    duration: "Estación de Salida"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Generator Barcelona",
+                    rating: 4.5,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJq3-mD5WipBIRQxCr-6SSacI",
+                    location: "Barrio de Gràcia, Barcelona"
+                }
+            },
+            {
+                id: 2,
+                city: "Francia (Niza y Cannes)",
+                country: "Francia",
+                days: "Días 3 - 4",
+                coords: [43.7102, 7.2620],
+                image: "https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=800&q=80",
+                trainInfo: {
+                    from: "Barcelona Sants",
+                    duration: "5h 20m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Villa Saint Exupéry Beach Hostel",
+                    rating: 3.6,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJoW29r6bazRIReMmoaOLFwMI",
+                    location: "Centro de Niza"
+                }
+            },
+            {
+                id: 3,
+                city: "Venecia",
+                country: "Italia",
+                days: "Días 5 - 6",
+                coords: [45.4408, 12.3155],
+                image: "https://images.unsplash.com/photo-1519112232436-9923c6ba3d26?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+                trainInfo: {
+                    from: "Nice Ville",
+                    duration: "6h 15m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Combo, Venezia",
+                    rating: 4.6,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJQS7mwd2xfkcRJ9ZAufVrYvI",
+                    location: "Cannaregio, Venecia"
+                }
+            },
+            {
+                id: 4,
+                city: "Liubliana",
+                country: "Eslovenia",
+                days: "Día 7",
+                coords: [46.0569, 14.5058],
+                image: "https://images.unsplash.com/photo-1716831313996-307f651b18c6?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+                trainInfo: {
+                    from: "Venezia Mestre",
+                    duration: "3h 40m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Hostel Celica",
+                    rating: 4.5,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJ_zSGBYszZUcRlSTyZy_GA1A",
+                    location: "Metelkova, Liubliana"
+                }
+            },
+            {
+                id: 5,
+                city: "Budapest",
+                country: "Hungría",
+                days: "Días 8 - 10",
+                coords: [47.4979, 19.0402],
+                image: "https://images.unsplash.com/photo-1616432902940-b7a1acbc60b3?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+                trainInfo: {
+                    from: "Ljubljana Central",
+                    duration: "5h 50m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Maverick Central Market Hostel",
+                    rating: 4.7,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJcdlorFjdQUcRiuzdyS5Pqy4",
+                    location: "Gran Mercado Central, Budapest"
+                }
+            },
+            {
+                id: 6,
+                city: "Bratislava",
+                country: "Eslovaquia",
+                days: "Días 11 - 12",
+                coords: [48.1486, 17.1077],
+                image: "https://images.unsplash.com/photo-1620283110809-3ff3adfe057b?q=80&w=1332&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+                trainInfo: {
+                    from: "Budapest-Keleti",
+                    duration: "2h 25m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Patio Hostel Bratislava",
+                    rating: 4.1,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJV-I0TESJbEcRBHD133h9pxw",
+                    location: "Centro Histórico, Bratislava"
+                }
+            },
+            {
+                id: 7,
+                city: "Praga",
+                country: "Chequia",
+                days: "Días 13 - 15",
+                coords: [50.0755, 14.4378],
+                image: "https://images.unsplash.com/photo-1564511287568-54483b52a35e?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+                trainInfo: {
+                    from: "Bratislava hl.st.",
+                    duration: "4h 05m"
+                },
+                activities: [
+                    "Actividad 1",
+                    "Actividad 2",
+                    "Actividad 3"
+                ],
+                accommodation: {
+                    name: "Czech Inn Hostel",
+                    rating: 4.4,
+                    mapsUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJ62_SZ4GUC0cRLBcfYtbKWVg",
+                    location: "Vinohrady, Praga"
+                }
+            }
+        ];
+
+        // PUNTOS CLAVE DE LA RUTA (METIDOS AÚN MÁS AL INTERIOR / TIERRA FIRME)
+        const baseLandWaypoints = [
+            // BARCELONA (0)
+            [41.3879, 2.1699],
+            [42.0500, 2.7000], // Girona (interior)
+            [42.3500, 2.8500], // Figueres (interior)
+            [42.7500, 2.7500], // Perpignan interior
+            [43.3000, 3.1000], // Narbonne interior
+            [43.7000, 3.8000], // Montpellier interior
+            [43.9000, 4.3000], // Nîmes interior
+            [44.0500, 4.7500], // Avignon interior
+            [44.5000, 5.5000], // Gap / Vías alpinas francesas del interior
+            [44.2000, 6.8000], // Alpes Marítimos altos (interior)
+            // FRANCIA / NIZA Y CANNES (1)
+            [43.7102, 7.2620],
+            [44.1000, 7.6000], // Breil-sur-Roya (vías de montaña profundas)
+            [44.4000, 7.6000], // Cuneo (interior de Italia)
+            [44.8000, 7.7000], // Carmagnola
+            [45.0700, 7.6800], // Turín
+            [45.3500, 8.6000], // Novara
+            [45.4642, 9.1900], // Milán
+            [45.5400, 10.2100], // Brescia
+            [45.4384, 10.9916], // Verona
+            [45.4200, 11.8800], // Padua
+            // VENECIA (2)
+            [45.4408, 12.3155],
+            [45.7000, 12.6000], // Treviso / Pordenone interior
+            [46.0600, 13.2300], // Udine interior
+            [45.9600, 13.6500], // Gorizia
+            [46.0000, 14.1000], // Postojna/Logatec interior de Eslovenia
+            // LIUBLIANA (3)
+            [46.0569, 14.5058],
+            [46.2500, 15.2500], // Celje
+            [46.5500, 15.6500], // Maribor
+            [46.8500, 16.8500], // Zalaegerszeg (Hungría interior)
+            [47.1800, 17.9000], // Veszprém
+            [47.2500, 18.5000], // Székesfehérvár
+            // BUDAPEST (4)
+            [47.4979, 19.0402],
+            [47.7800, 19.1300], // Vac
+            [47.8000, 18.7500], // Esztergom
+            [47.9000, 18.1500], // Nove Zamky
+            // BRATISLAVA (5)
+            [48.1486, 17.1077],
+            [48.7500, 16.8800], // Breclav
+            [49.1900, 16.6000], // Brno
+            [49.8100, 15.4700], // Havlickuv Brod
+            // PRAGA (6)
+            [50.0755, 14.4378]
+        ];
+
+        // ALGORITMO CHAIKIN DE SUAVIZADO DE CURVAS
+        function smoothPolyline(points, iterations = 3) {
+            let curr = points.slice();
+            for (let it = 0; it < iterations; it++) {
+                const smoothed = [];
+                smoothed.push(curr[0]);
+                for (let i = 0; i < curr.length - 1; i++) {
+                    const p0 = curr[i];
+                    const p1 = curr[i + 1];
+
+                    const q = [
+                        0.75 * p0[0] + 0.25 * p1[0],
+                        0.75 * p0[1] + 0.25 * p1[1]
+                    ];
+                    const r = [
+                        0.25 * p0[0] + 0.75 * p1[0],
+                        0.25 * p0[1] + 0.75 * p1[1]
+                    ];
+
+                    smoothed.push(q);
+                    smoothed.push(r);
+                }
+                smoothed.push(curr[curr.length - 1]);
+                curr = smoothed;
+            }
+            return curr;
+        }
+
+        // Generar ruta suave y redondeada
+        const landRailRoute = smoothPolyline(baseLandWaypoints, 2);
+
+        // Encontrar los índices correspondientes a cada ciudad tras el suavizado
+        function buildStationIndices() {
+            const indices = [];
+            itineraryData.forEach((dest) => {
+                let bestIdx = 0;
+                let minDist = Infinity;
+                landRailRoute.forEach((pt, i) => {
+                    const d = Math.hypot(pt[0] - dest.coords[0], pt[1] - dest.coords[1]);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestIdx = i;
+                    }
+                });
+                indices.push(bestIdx);
+            });
+            return indices;
+        }
+
+        const stationRouteIndices = buildStationIndices();
+
+        // VARIABLES GLOBALES
+        let map;
+        let currentDestinationIndex = 0;
+        let stationMarkers = [];
+        let trainMarker = null;
+        let animatedPolyline = null;
+        let isAnimating = false;
+        let animationFrameId = null;
+
+        // INICIALIZACIÓN CON RETARDO SEGURO
+        window.onload = function() {
+            initMap();
+            renderTimelineBadges();
+            
+            // Garantizar que la maquetación del DOM esté completa
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (map) {
+                        map.invalidateSize();
+                        selectDestination(0, true);
+                    }
+                }, 200);
+            });
+        };
+
+        // INICIALIZAR LEAFLET MAP
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([46.0, 10.5], 5);
+
+            L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4w58_1_6d22cd45b9c3ac15ccd19f16', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+                crossOrigin: true
+            }).addTo(map);
+
+            // Línea de fondo con la ruta completa
+            L.polyline(landRailRoute, {
+                color: '#b8435d',
+                weight: 4,
+                opacity: 0.3,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Línea activa de la ruta
+            animatedPolyline = L.polyline([landRailRoute[0]], {
+                color: '#5b6e3a',
+                weight: 5,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Marcadores de paradas
+            itineraryData.forEach((dest, index) => {
+                const customIcon = L.divIcon({
+                    className: 'custom-station-wrapper',
+                    html: `<div id="marker-${index}" class="custom-station-icon w-8 h-8 text-xs">${index + 1}</div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                const marker = L.marker(dest.coords, { icon: customIcon }).addTo(map);
+                
+                marker.on('click', () => {
+                    if (isAnimating) stopTourAnimation();
+                    selectDestination(index);
+                });
+
+                stationMarkers.push(marker);
+            });
+
+            <!-- Marcador flotante del Tren -->
+            const trainIcon = L.divIcon({
+                className: 'train-marker-wrapper',
+                html: `
+                    <div class="w-11 h-11 rounded-full bg-white border-2 border-rumea-olive shadow-xl flex items-center justify-center p-0 overflow-hidden transition-transform hover:scale-110">
+                        <img src="https://i.ibb.co/0jzXdM6J/rumea-logo.png" alt="Rumea Tren" class="w-full h-full object-contain scale-[1.55] translate-x-[0.5px]">
+                    </div>
+                `,
+                iconSize: [44, 44],
+                iconAnchor: [22, 22]
+            });
+
+            trainMarker = L.marker(itineraryData[0].coords, { 
+                icon: trainIcon,
+                zIndexOffset: 2000 
+            }).addTo(map);
+
+            window.addEventListener('resize', () => {
+                if (map) map.invalidateSize();
+            });
+        }
+
+        // MOSTRAR BADGES SUPERIORES
+        function renderTimelineBadges() {
+            const container = document.getElementById('timelineBadges');
+            container.innerHTML = itineraryData.map((dest, idx) => `
+                <button onclick="if(isAnimating) stopTourAnimation(); selectDestination(${idx})" id="badge-${idx}" class="px-3 py-1 rounded-xl text-xs font-medium whitespace-nowrap transition-all flex items-center space-x-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100">
+                    <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+                    <span>${dest.city}</span>
+                </button>
+            `).join('');
+        }
+
+        // SELECCIONAR DESTINO CON VERIFICACIÓN DE SEGURIDAD
+        function selectDestination(index, initialSetup = false) {
+            currentDestinationIndex = index;
+            const data = itineraryData[index];
+
+            if (!data || !data.coords || isNaN(data.coords[0]) || isNaN(data.coords[1])) return;
+
+            if (map) {
+                map.invalidateSize();
+                if (initialSetup) {
+                    map.setView(data.coords, 6);
+                } else {
+                    map.flyTo(data.coords, 6, {
+                        animate: true,
+                        duration: 1.0
+                    });
+                }
+            }
+
+            if (trainMarker && !isAnimating) {
+                trainMarker.setLatLng(data.coords);
+            }
+
+            const targetRouteIndex = stationRouteIndices[index];
+            const activePath = landRailRoute.slice(0, targetRouteIndex + 1);
+            if (animatedPolyline) {
+                animatedPolyline.setLatLngs(activePath);
+            }
+
+            itineraryData.forEach((_, idx) => {
+                const el = document.getElementById(`marker-${idx}`);
+                const badge = document.getElementById(`badge-${idx}`);
+                
+                if (el) {
+                    if (idx === index) el.classList.add('active');
+                    else el.classList.remove('active');
+                }
+
+                if (badge) {
+                    if (idx === index) {
+                        badge.className = "px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center space-x-1.5 bg-rumea-500 text-white shadow-sm shadow-rumea-500/20";
+                    } else {
+                        badge.className = "px-3 py-1 rounded-xl text-xs font-medium whitespace-nowrap transition-all flex items-center space-x-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100";
+                    }
+                }
+            });
+
+            document.getElementById('currentStepIndex').innerText = index + 1;
+            document.getElementById('prevBtn').disabled = (index === 0);
+            document.getElementById('nextBtn').disabled = (index === itineraryData.length - 1);
+
+            renderDetailsPanel(data);
+        }
+
+        // RENDERIZAR PANEL LATERAL
+        function renderDetailsPanel(data) {
+            const container = document.getElementById('detailsContent');
+            
+            container.classList.remove('fade-in');
+            void container.offsetWidth;
+            container.classList.add('fade-in');
+
+            const fullStars = Math.floor(data.accommodation.rating);
+            const hasHalfStar = (data.accommodation.rating % 1) >= 0.5;
+            let starsHtml = '';
+            for (let i = 0; i < fullStars; i++) {
+                starsHtml += '<i class="fa-solid fa-star text-amber-400 text-xs"></i>';
+            }
+            if (hasHalfStar) {
+                starsHtml += '<i class="fa-solid fa-star-half-stroke text-amber-400 text-xs"></i>';
+            }
+
+            container.innerHTML = `
+                <div class="relative h-44 rounded-2xl overflow-hidden shadow-sm border border-slate-100 group">
+                    <img src="${data.image}" alt="${data.city}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onerror="this.src='https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=800&q=80'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
+                    
+                    <div class="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                        <div>
+                            <span class="px-2.5 py-0.5 bg-rumea-500/90 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-md mb-1 inline-block">
+                                ${data.days}
+                            </span>
+                            <h2 class="text-2xl font-extrabold text-white tracking-tight">${data.city}</h2>
+                            <p class="text-xs text-slate-200 flex items-center">
+                                <i class="fa-solid fa-location-dot text-rumea-300 mr-1.5"></i>${data.country}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-rumea-50/60 border border-rumea-100 p-3.5 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 flex items-center justify-center shrink-0">
+                            <img src="https://i.ibb.co/0jzXdM6J/rumea-logo.png" alt="Rumea Tren" class="w-full h-full object-contain scale-125">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block font-semibold uppercase">Trayecto en Tren</span>
+                            <span class="text-xs font-bold text-slate-800">${data.trainInfo.from} → ${data.city}</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs font-extrabold text-rumea-olive block">${data.trainInfo.duration}</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center">
+                        <i class="fa-solid fa-list-check text-rumea-500 mr-2"></i> Qué visitaremos
+                    </h3>
+                    <ul class="space-y-2">
+                        ${data.activities.map((act) => `
+                            <li class="flex items-center space-x-3 bg-slate-50 border border-slate-100 p-2.5 rounded-xl">
+                                <i class="fa-solid fa-star text-rumea-500 text-xs shrink-0 ml-1"></i>
+                                <span class="text-xs text-slate-700 font-medium my-auto">${act}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center">
+                        <i class="fa-solid fa-bed text-rumea-500 mr-2"></i> Dónde nos alojamos
+                    </h3>
+                    <div class="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl space-y-2">
+                        <div class="flex justify-between items-center">
+                            <h4 class="text-xs font-bold text-slate-800">${data.accommodation.name}</h4>
+                            <a href="${data.accommodation.mapsUrl}" target="_blank" title="Ver en Google Maps" class="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:border-rumea-500 hover:shadow-md flex items-center justify-center transition-all p-1.5 group shrink-0">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Google_Maps_icon_%282026%29.svg/250px-Google_Maps_icon_%282026%29.svg.png" 
+                                     alt="Google Maps" 
+                                     class="w-full h-full object-contain transition-transform group-hover:scale-110"
+                                     onerror="this.onerror=null; this.src='https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Google_Maps_icon_%282020-2026%29.svg/250px-Google_Maps_icon_%282020-2026%29.svg.png';">
+                            </a>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="flex items-center space-x-1">
+                                ${starsHtml}
+                            </div>
+                            <span class="text-xs font-bold text-slate-700">${data.accommodation.rating}</span>
+                            <span class="text-[10px] text-slate-400">en Google Maps</span>
+                        </div>
+                        <p class="text-xs text-slate-500 flex items-center">
+                            <i class="fa-solid fa-map-pin text-slate-400 mr-2 w-3"></i> ${data.accommodation.location}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // NAVEGACIÓN ANTERIOR / SIGUIENTE
+        function navigateDestination(direction) {
+            if (isAnimating) stopTourAnimation();
+            const newIndex = currentDestinationIndex + direction;
+            if (newIndex >= 0 && newIndex < itineraryData.length) {
+                selectDestination(newIndex);
+            }
+        }
+
+        // ANIMACIÓN DE RUTA Y TREN
+        function toggleTourAnimation() {
+            if (isAnimating) {
+                stopTourAnimation();
+            } else {
+                startTourAnimation();
+            }
+        }
+
+        function startTourAnimation() {
+            isAnimating = true;
+            document.getElementById('playIcon').className = "fa-solid fa-pause text-[10px]";
+            document.getElementById('playText').innerText = "PAUSAR RUTA";
+
+            if (currentDestinationIndex >= itineraryData.length - 1) {
+                selectDestination(0);
+            }
+
+            animateSegment(currentDestinationIndex);
+        }
+
+        function animateSegment(fromStationIdx) {
+            if (!isAnimating || fromStationIdx >= itineraryData.length - 1) {
+                stopTourAnimation();
+                return;
+            }
+
+            const startPtIdx = stationRouteIndices[fromStationIdx];
+            const endPtIdx = stationRouteIndices[fromStationIdx + 1];
+            const segmentPoints = landRailRoute.slice(startPtIdx, endPtIdx + 1);
+
+            let currentPt = 0;
+            const totalSteps = 5; // Reducido aún más (de 12 a 5) para un desplazamiento ultra rápido entre paradas
+            let step = 0;
+
+            function stepAnimation() {
+                if (!isAnimating) return;
+
+                if (currentPt < segmentPoints.length - 1) {
+                    const p1 = segmentPoints[currentPt];
+                    const p2 = segmentPoints[currentPt + 1];
+
+                    const lat = p1[0] + (p2[0] - p1[0]) * (step / totalSteps);
+                    const lng = p1[1] + (p2[1] - p1[1]) * (step / totalSteps);
+                    const currentPos = [lat, lng];
+
+                    trainMarker.setLatLng(currentPos);
+
+                    const pathSoFar = landRailRoute.slice(0, startPtIdx + currentPt + 1);
+                    pathSoFar.push(currentPos);
+                    animatedPolyline.setLatLngs(pathSoFar);
+
+                    step++;
+                    if (step > totalSteps) {
+                        step = 0;
+                        currentPt++;
+                    }
+
+                    animationFrameId = requestAnimationFrame(stepAnimation);
+                } else {
+                    const nextStationIdx = fromStationIdx + 1;
+                    selectDestination(nextStationIdx, false);
+
+                    setTimeout(() => {
+                        if (isAnimating) {
+                            animateSegment(nextStationIdx);
+                        }
+                    }, 1800); // Pausa más prolongada (1.8 segundos) en cada destino para apreciar la tarjeta
+                }
+            }
+
+            stepAnimation();
+        }
+
+        function stopTourAnimation() {
+            isAnimating = false;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            document.getElementById('playIcon').className = "fa-solid fa-play text-[10px]";
+            document.getElementById('playText').innerText = "REPRODUCIR RUTA";
+        }
+
+        // MODAL DE RESERVA
+        function showBookingModal() {
+            const modal = document.getElementById('bookingModal');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+        }
+
+        function closeBookingModal() {
+            const modal = document.getElementById('bookingModal');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        function handleBookingSubmit(event) {
+            event.preventDefault();
+            closeBookingModal();
+            
+            const notification = document.createElement('div');
+            notification.className = 'fixed bottom-6 right-6 z-50 bg-rumea-500 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center space-x-3 fade-in';
+            notification.innerHTML = `
+                <i class="fa-solid fa-circle-check text-lg"></i>
+                <span class="text-xs font-bold">¡Solicitud enviada a RUMEA! Nos pondremos en contacto pronto.</span>
+            `;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
